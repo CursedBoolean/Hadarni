@@ -1,0 +1,143 @@
+HADARNI – CHANGE LOG
+====================
+Date: 2026-05-02
+
+1. NEW: lib/views/widgets/app_drawer.dart
+   - Side drawer with nav to: Home, Learn Letters, Learn Words, Word Game
+   - Each item has an icon + Arabic label
+   - Uses pushAndRemoveUntil to avoid back-stack buildup between main screens
+   - Styled header with app name and tagline
+
+2. MODIFIED: lib/views/widgets/app_top_bar.dart
+   - Added optional `showMenuButton` param (default: false)
+   - When true, shows a hamburger button (left side) that opens the drawer
+
+3. MODIFIED: lib/views/home/home_screen.dart
+   - Added drawer: AppDrawer()
+   - Enabled showMenuButton on top bar
+   - Activity cards column is now vertically centered
+
+4. MODIFIED: lib/views/learn_letters/learn_letters_intro_screen.dart
+   - Added drawer + showMenuButton
+   - Start button wrapped in Center()
+
+5. MODIFIED: lib/views/learn_words/learn_words_intro_screen.dart
+   - Added drawer + showMenuButton
+   - Start button wrapped in Center()
+
+6. MODIFIED: lib/views/word_game/word_game_intro_screen.dart
+   - Added drawer + showMenuButton
+   - Start button wrapped in Center()
+
+7. MODIFIED: lib/views/learn_letters/learn_letters_exercise_screen.dart
+   - Column uses crossAxisAlignment: center
+   - Cloud, mic button, and finish button all wrapped in Center()
+
+8. MODIFIED: lib/views/learn_words/learn_words_exercise_screen.dart
+   - Column uses crossAxisAlignment: center
+   - Image circle, word row, and mic button all wrapped/aligned to center
+
+9. MODIFIED: lib/views/word_game/word_game_screen.dart
+   - Word label and finish button wrapped in Center()
+
+10. MODIFIED: lib/main.dart
+    - Entry point changed: LearnWordsIntroScreen → HomeScreen
+
+---
+Date: 2026-05-04
+
+11. NEW: lib/models/progress_model.dart
+    - Data model holding dashboard stats: time spent, letters/words learned, per-item progress
+    - Static list of 28 Arabic letters and 8 demo words
+    - Factory ProgressModel.demo() returns sample data for UI testing
+    - overallProgress getter computes combined completion percentage
+
+12. NEW: lib/views/widgets/progress_ring.dart
+    - Small circular progress indicator using CustomPainter sweep arc
+    - Configurable size, strokeWidth, trackColor, progressColor
+    - Used in dashboard chips and letter picker sheet
+
+13. NEW: lib/views/widgets/letter_picker_sheet.dart
+    - Modal bottom sheet with a 4-column grid of Arabic letters
+    - Each cell shows the letter + a ProgressRing underneath
+    - Completed letters (100%) get an orange accent border
+    - Returns the selected letter to the caller via Navigator.pop
+
+14. MODIFIED: lib/views/home/home_screen.dart
+    - Full dashboard overhaul replacing simple activity card list
+    - Greeting section with wave emoji
+    - 3 glassmorphic stat cards row: time spent, letters learned, words learned
+    - Overall progress bar with percentage label
+    - Horizontally scrollable letter progress chips (tappable → exercise screen)
+    - Horizontally scrollable word progress chips (tappable → exercise screen)
+    - Activity navigation cards retained at bottom
+    - Whole body wrapped in SingleChildScrollView for smaller screens
+
+15. MODIFIED: lib/views/learn_letters/learn_letters_intro_screen.dart
+    - Cloud shape wrapped in GestureDetector — tappable
+    - On tap opens LetterPickerSheet bottom sheet
+    - Selecting a letter navigates to exercise screen with that letter pre-loaded
+    - Added "اختر حرفاً" hint text inside the cloud
+
+16. MODIFIED: lib/views/learn_letters/learn_letters_exercise_screen.dart
+    - Added optional initialLetter constructor parameter
+    - If provided, sets currentLetter to that value instead of default 'أ'
+
+17. MODIFIED: lib/views/learn_words/learn_words_exercise_screen.dart
+    - Added optional initialWord constructor parameter
+    - If provided, sets currentWord to that value instead of default 'كاس'
+
+---
+Date: 2026-05-06
+
+18. NEW: lib/models/user_model.dart
+    - Data model for app user: uid, email, childName, birthday, disorderType1, disorderType2, createdAt
+    - toMap() for Firestore writes, factory fromMap() for reads
+    - copyWith() for immutable updates
+
+19. NEW: lib/controllers/auth_controller.dart
+    - ChangeNotifier-based controller for Firebase Auth + Firestore
+    - signUp(email, password) — creates account via FirebaseAuth
+    - logIn(email, password) — signs in, fetches user profile
+    - logOut() — signs out, clears profile
+    - saveUserProfile(UserModel) — writes to Firestore users/{uid}
+    - fetchUserProfile() — reads profile from Firestore
+    - Arabic-localized error messages for all FirebaseAuthException codes
+    - Exposes isLoading, errorMessage, user, userProfile, authStateChanges
+
+20. MODIFIED: pubspec.yaml
+    - firebase_core downgraded to ^3.15.2 for compatibility
+    - Added firebase_auth ^5.5.1
+    - Added cloud_firestore ^5.6.5
+    - Added provider ^6.1.2
+
+21. MODIFIED: lib/main.dart
+    - Firebase.initializeApp() called before runApp
+    - App wrapped in ChangeNotifierProvider<AuthController>
+    - Home replaced with AuthGate widget (StreamBuilder on authStateChanges)
+    - AuthGate shows WelcomeScreen if not logged in, HomeScreen if logged in
+
+22. MODIFIED: lib/views/auth/login_screen.dart
+    - Username field changed to email (matching Firebase Auth + register screen)
+    - _handleLogin() calls AuthController.logIn via Provider
+    - Loading spinner shown via Consumer<AuthController> while isLoading
+    - SnackBar error display on failure
+    - Navigates to HomeScreen with pushAndRemoveUntil on success
+
+23. MODIFIED: lib/views/auth/register_screen.dart
+    - _handleRegister() validates fields (empty, password match, min length)
+    - Calls AuthController.signUp via Provider
+    - Loading spinner + SnackBar error feedback
+    - Navigates to AdditionalInfoScreen on success
+
+24. MODIFIED: lib/views/auth/additional_info_screen.dart
+    - _handleSubmit() creates UserModel from form + current Firebase user
+    - Calls AuthController.saveUserProfile to persist in Firestore
+    - Validation for required fields (childName, birthday)
+    - Loading spinner + SnackBar errors
+    - Birthday hint text fixed ('اختر تاريخ الميلاد')
+
+25. MODIFIED: lib/views/widgets/app_drawer.dart
+    - Shows user email in drawer header (below app name)
+    - Added logout drawer item with red destructive styling
+    - Logout calls AuthController.logOut, navigates to WelcomeScreen
