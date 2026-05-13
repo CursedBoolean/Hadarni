@@ -136,12 +136,26 @@ async def transcribe(
         )
         input_features = inputs.input_features.to(DEVICE)
 
-        # Run inference
+        # Build an explicit attention mask (all-ones = full sequence attended to).
+        # Without this, transformers warns that pad_token == eos_token makes
+        # automatic mask inference unreliable for Whisper.
+        attention_mask = torch.ones(
+            input_features.shape[:2], dtype=torch.long, device=DEVICE
+        )
+
+        # Run inference.
+        # Do NOT pass suppress_tokens / begin_suppress_tokens here — they are
+        # already stored in the model's saved generation_config.json.  Passing
+        # them again causes transformers to create duplicate logits processors
+        # which produces warnings and slows down generation significantly.
+        # forced_decoder_ids pins the language/task prefix tokens cleanly.
+        forced_ids = processor.get_decoder_prompt_ids(language="ar", task="transcribe")
         with torch.no_grad():
             predicted_ids = model.generate(
                 input_features,
-                language="ar",
-                task="transcribe",
+                attention_mask=attention_mask,
+                forced_decoder_ids=forced_ids,
+                no_repeat_ngram_size=3,
             )
 
         transcript: str = processor.batch_decode(

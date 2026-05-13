@@ -141,3 +141,66 @@ Date: 2026-05-06
     - Shows user email in drawer header (below app name)
     - Added logout drawer item with red destructive styling
     - Logout calls AuthController.logOut, navigates to WelcomeScreen
+
+─────────────────────────────────────────────────────────
+Session: 2026-05-11 — Whisper ASR Integration
+─────────────────────────────────────────────────────────
+
+26. NEW: tools/whisper_server.py
+    - FastAPI server that loads the fine-tuned Whisper model from
+      whisper-finetuned-arabic/ at project root
+    - GET  /health  — liveness check, returns device (cpu/cuda)
+    - POST /transcribe — accepts multipart (audio file + target string)
+      • Uses librosa to resample to 16 kHz mono (Whisper's native format)
+      • Runs WhisperForConditionalGeneration.generate() with language=ar
+      • Normalises Arabic before comparison: strips diacritics, unifies
+        alef variants (أإآ→ا), ta-marbuta (ة→ه), ya (ى→ي)
+      • Returns {transcript, is_correct, target, target_normalised,
+                 transcript_normalised}
+    - CORS middleware enabled (allow_origins=*)
+    - Fixed server warnings:
+      • Explicit attention_mask (ones tensor) to silence pad==eos warning
+      • suppress_tokens=[] and begin_suppress_tokens=[] passed to
+        model.generate() to prevent duplicate logits processor creation
+
+27. NEW: tools/requirements.txt
+    - Python dependencies: fastapi, uvicorn[standard], transformers,
+      torch, librosa, python-multipart, numpy, soundfile
+    - Start server with:
+        python -m uvicorn tools.whisper_server:app --host 0.0.0.0 --port 8000 --reload
+
+28. NEW: lib/services/whisper_service.dart
+    - WhisperResult model: {transcript, isCorrect, target}
+    - WhisperService.transcribe(audioPath, target) — multipart POST
+      to the FastAPI server, returns WhisperResult
+    - WhisperService.isReachable() — GET /health with 5 s timeout
+    - WhisperServerException typed error class
+    - baseUrl = http://10.0.2.2:8000 (Android emulator loopback)
+      (change to 127.0.0.1 for iOS simulator, or LAN IP for physical device)
+
+29. MODIFIED: pubspec.yaml
+    - Added dependency: http ^1.2.2
+
+30. MODIFIED: lib/views/learn_letters/learn_letters_exercise_screen.dart
+    - Recording format changed from M4A to WAV 16 kHz mono
+      (RecordConfig encoder: AudioEncoder.wav, sampleRate: 16000, numChannels: 1)
+    - After 2 s auto-stop: calls WhisperService.transcribe(path, currentLetter)
+    - Animated _FeedbackCard slides in below mic with scale animation:
+        ✅ "ممتاز! 🎉" on correct match
+        ❌ "حاول مرة أخرى" on mismatch
+        Shows raw transcript: "سمعنا: ..."
+        Spinner while isProcessing=true
+    - _RecordingRing: pulsing red halo around mic button during recording
+    - SnackBar error if server unreachable
+    - Uses SingleTickerProviderStateMixin for AnimationController
+
+31. MODIFIED: lib/views/learn_words/learn_words_exercise_screen.dart
+    - Same recording + transcription + feedback changes as learn_letters
+    - Target is currentWord instead of currentLetter
+    - Added StartButton "إنهاء" at bottom
+
+32. MODIFIED: android/app/src/main/AndroidManifest.xml
+    - Added RECORD_AUDIO permission (required for mic on Android)
+    - Added MODIFY_AUDIO_SETTINGS permission
+    (Without these the record package silently fails to record)
+

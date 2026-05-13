@@ -47,3 +47,4 @@ app.*.map.json
 .env
 model.safetensors
 whisper-finetuned-arabic/
+lib/firebase_options.dart
