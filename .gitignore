@@ -48,3 +48,6 @@ app.*.map.json
 model.safetensors
 whisper-finetuned-arabic/
 lib/firebase_options.dart
+tools/*.json
+final_model/
+*.txt

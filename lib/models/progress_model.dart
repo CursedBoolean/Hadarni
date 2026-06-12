@@ -1,5 +1,6 @@
+import 'streak_model.dart';
+
 /// Data model holding all dashboard progress stats.
-/// Uses demo data until backend integration.
 class ProgressModel {
   final int totalMinutesSpent;
   final int lettersLearned;
@@ -34,10 +35,36 @@ class ProgressModel {
     'ن', 'ه', 'و', 'ي',
   ];
 
-  /// Demo word set used until backend provides real data.
-  static const List<String> demoWords = [
-    'كأس', 'كتاب', 'قلم', 'باب', 'شمس', 'قمر', 'بيت', 'ماء',
+  /// All 22 words from objects.json.
+  static const List<String> allWords = [
+    'قَلَم',
+    'كِتَاب',
+    'بَاب',
+    'شَجَرَة',
+    'زَهْرَة',
+    'سَمَاء',
+    'بَحْر',
+    'قِطّ',
+    'كَلْب',
+    'طَائِر',
+    'سَمَكَة',
+    'تُفَّاحَة',
+    'مَاء',
+    'حَلِيب',
+    'سَيَّارَة',
+    'بَيْت',
+    'مَدْرَسَة',
+    'كَأْس',
+    'طَرِيق',
+    'سَرِير',
+    'كُرْسِيّ',
+    'مِفْتَاح',
   ];
+
+  /// Helper to strip diacritics for backward-compatible streak checks
+  static String _stripDiacritics(String text) {
+    return text.replaceAll(RegExp(r'[\u064B-\u065F\u0670\u0640]'), '');
+  }
 
   /// Returns a demo instance with sample progress data.
   factory ProgressModel.demo() {
@@ -57,16 +84,47 @@ class ProgressModel {
 
     final wordProg = <String, double>{};
     final progValues = [1.0, 0.9, 0.75, 0.6, 0.4, 0.2, 0.1, 0.0];
-    for (int i = 0; i < demoWords.length; i++) {
-      wordProg[demoWords[i]] = progValues[i];
+    for (int i = 0; i < allWords.length; i++) {
+      wordProg[allWords[i]] = i < progValues.length ? progValues[i] : 0.0;
     }
 
     return ProgressModel(
       totalMinutesSpent: 47,
-      lettersLearned: 8,
+      lettersLearned: 5, // Matching demo mastered count
       totalLetters: 28,
-      wordsLearned: 5,
-      totalWords: demoWords.length,
+      wordsLearned: 3,
+      totalWords: allWords.length,
+      letterProgress: letterProg,
+      wordProgress: wordProg,
+    );
+  }
+
+  /// Creates a [ProgressModel] from live [StreakData].
+  ///
+  /// Pre-populates every Arabic letter and demo word with their streak-based
+  /// progress values. Items not yet attempted default to 0.
+  factory ProgressModel.fromStreakData(StreakData data) {
+    // Build letter progress map — include all 28 letters
+    final letterProg = <String, double>{};
+    for (final letter in arabicLetters) {
+      final streak = data.letters[letter];
+      letterProg[letter] = streak?.progress ?? 0.0;
+    }
+
+    // Build word progress map — include all 22 words from objects.json
+    final wordProg = <String, double>{};
+    for (final word in allWords) {
+      // Look up streak using both exact word (with diacritics) and stripped word (without)
+      final streak = data.words[word] ?? data.words[_stripDiacritics(word)];
+      wordProg[word] = streak?.progress ?? 0.0;
+    }
+
+    return ProgressModel(
+      totalMinutesSpent: 0, // TODO: implement time tracking
+      lettersLearned: data.lettersLearned,
+      totalLetters: arabicLetters.length,
+      wordsLearned: data.wordsLearned,
+      totalWords: allWords.length,
       letterProgress: letterProg,
       wordProgress: wordProg,
     );

@@ -35,13 +35,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 # ── Model path ────────────────────────────────────────────────────────────────
-# whisper-finetuned-arabic/ lives at the project root, one level above tools/
-MODEL_DIR = Path(__file__).parent.parent / "whisper-finetuned-arabic"
+# final_model/final_model/ lives at the project root, one level above tools/
+MODEL_DIR = Path(__file__).parent.parent / "final_model" / "final_model"
 
 if not MODEL_DIR.exists():
     raise FileNotFoundError(
         f"Model directory not found: {MODEL_DIR}\n"
-        "Make sure the whisper-finetuned-arabic/ folder is at the project root."
+        "Make sure the final_model/final_model/ folder is at the project root."
     )
 
 print(f"[Hadarni] Loading Whisper processor from: {MODEL_DIR}")
@@ -162,7 +162,18 @@ async def transcribe(
             predicted_ids, skip_special_tokens=True
         )[0].strip()
 
-        is_correct = texts_match(transcript, target)
+        # For single-letter targets (letter exercises), Whisper often outputs a
+        # full word when the child pronounces just one letter (e.g. "بَابا"
+        # instead of "ب").  Compare only the first character of the transcript
+        # so is_correct reflects the actual pronunciation correctly.
+        transcript_for_comparison = transcript
+        target_normalised_check = normalise_arabic(target)
+        if len(target_normalised_check) == 1:
+            # Take the first non-whitespace character of the transcript
+            stripped = transcript.strip()
+            transcript_for_comparison = stripped[0] if stripped else transcript
+
+        is_correct = texts_match(transcript_for_comparison, target)
 
         return {
             "transcript": transcript,

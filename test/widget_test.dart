@@ -8,11 +8,12 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:hadarni/main.dart';
+import 'package:hadarni/services/whisper_server_manager.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const HadarniApp());
+    await tester.pumpWidget(HadarniApp(whisperManager: WhisperServerManager()));
 
     // Verify that our app starts.
     expect(find.byType(HadarniApp), findsOneWidget);

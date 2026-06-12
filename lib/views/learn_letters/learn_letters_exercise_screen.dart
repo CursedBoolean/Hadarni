@@ -1,13 +1,20 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import '../../controllers/auth_controller.dart';
+import '../../controllers/progress_controller.dart';
+import '../../services/audio_service.dart';
+import '../../services/elevenlabs_tts_service.dart';
+import '../../services/feedback_service.dart';
 import '../../services/whisper_service.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_text_styles.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/cloud_shape.dart';
 import '../widgets/mic_button.dart';
+import '../widgets/server_status_banner.dart';
 import '../widgets/start_button.dart';
 
 /// Learn letters exercise — displays a letter in a cloud, records speech via
@@ -32,6 +39,8 @@ class _LearnLettersExerciseScreenState extends State<LearnLettersExerciseScreen>
   WhisperResult? lastResult;
 
   final AudioRecorder _audioRecorder = AudioRecorder();
+  final AudioService _audioService = AudioService();
+  final ElevenLabsTtsService _tts = ElevenLabsTtsService();
   late final AnimationController _feedbackCtrl;
   late final Animation<double> _feedbackAnim;
 
@@ -46,11 +55,21 @@ class _LearnLettersExerciseScreenState extends State<LearnLettersExerciseScreen>
       parent: _feedbackCtrl,
       curve: Curves.easeOutBack,
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _playPrompt();
+    });
+  }
+
+  void _playPrompt() {
+    _audioService.playAsset('audio/letters/$currentLetter.mp3');
   }
 
   @override
   void dispose() {
     _audioRecorder.dispose();
+    _audioService.dispose();
+    _tts.dispose();
     _feedbackCtrl.dispose();
     super.dispose();
   }
@@ -59,6 +78,8 @@ class _LearnLettersExerciseScreenState extends State<LearnLettersExerciseScreen>
     if (isRecording || isProcessing) return;
 
     try {
+      await _audioService.stop(); // Stop any prompt before recording
+
       if (await _audioRecorder.hasPermission()) {
         final directory = await getTemporaryDirectory();
         final path = '${directory.path}/recording_letters.wav';
@@ -96,6 +117,11 @@ class _LearnLettersExerciseScreenState extends State<LearnLettersExerciseScreen>
     await _audioRecorder.stop();
     if (!mounted) return;
 
+    // ── Capture context-dependent values before any await ─────────────────
+    // Reading from context across async gaps triggers use_build_context_synchronously.
+    final progressCtrl = context.read<ProgressController>();
+    final authCtrl = context.read<AuthController>();
+
     setState(() {
       isRecording = false;
       isProcessing = true;
@@ -112,6 +138,46 @@ class _LearnLettersExerciseScreenState extends State<LearnLettersExerciseScreen>
         isProcessing = false;
       });
       _feedbackCtrl.forward(from: 0);
+
+      // Record the attempt for streak tracking
+      progressCtrl.recordLetterAttempt(currentLetter, result.isCorrect);
+
+      // ── Send attempt to RAG feedback server & speak the response ─────────
+      final streakData = progressCtrl.streakData;
+      final letterStreak =
+          streakData.letters[currentLetter]?.currentStreak ?? 0;
+      final previousMistakes = result.isCorrect
+          ? 0
+          : (streakData.letters[currentLetter]?.bestStreak ?? 0);
+      final childName = authCtrl.userProfile?.childName ?? 'الطفل';
+
+      final response = await FeedbackService.sendFeedback(
+        targetText: currentLetter,
+        isCorrect: result.isCorrect,
+        childName: childName,
+        // Only send the first character of the transcription — Whisper may
+        // return a full word when the child pronounces a single letter.
+        spokenText: result.transcript.trim().isEmpty
+            ? ''
+            : result.transcript.trim().characters.first,
+        streak: letterStreak,
+        previousMistakes: previousMistakes,
+      );
+
+      if (!mounted) return;
+
+      // Use the actual key the server returns: 'personalized_text'
+      final feedbackText =
+          response?['personalized_text'] as String? ??
+          response?['feedback'] as String? ??
+          response?['message'] as String?;
+
+      if (feedbackText != null && feedbackText.isNotEmpty) {
+        debugPrint('[ElevenLabs] Speaking: $feedbackText');
+        await _tts.speak(feedbackText);
+      } else {
+        debugPrint('[ElevenLabs] No feedback text received — skipping TTS.');
+      }
     } catch (e) {
       debugPrint('Transcription error: $e');
       if (!mounted) return;
@@ -134,18 +200,34 @@ class _LearnLettersExerciseScreenState extends State<LearnLettersExerciseScreen>
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const AppTopBar(title: 'تعلم الحروف'),
+          // Server status warning banner (hidden when server is up)
+          const ServerStatusBanner(),
           const Spacer(flex: 1),
 
-          // Cloud with letter
+          // Cloud with letter and speaker icon
           Center(
-            child: CloudShape(
-              width: 300,
-              height: 220,
-              child: Text(
-                currentLetter,
-                style: AppTextStyles.arabicLetter,
-                textDirection: TextDirection.rtl,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CloudShape(
+                  width: 300,
+                  height: 220,
+                  child: Text(
+                    currentLetter,
+                    style: AppTextStyles.arabicLetter,
+                    textDirection: TextDirection.rtl,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                GestureDetector(
+                  onTap: _playPrompt,
+                  child: const Icon(
+                    Icons.volume_up,
+                    color: AppColors.warmOrange,
+                    size: 36,
+                  ),
+                ),
+              ],
             ),
           ),
 

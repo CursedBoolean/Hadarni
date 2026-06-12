@@ -41,6 +41,8 @@ dependencies:
   record: ^6.2.0
   path_provider: ^2.1.5
   http: ^1.2.2
+  audioplayers: ^6.0.0
+  google_fonts: ^8.1.0
 
 dev_dependencies:
   flutter_test:
@@ -67,6 +69,9 @@ flutter:
   assets:
     - assets/images/
     - assets/audio/
+    - assets/audio/letters/
+    - assets/audio/words/
+    - assets/audio/feedback/
     - lib/models/
 
   # An image asset can refer to one or more resolution-specific "variants", see

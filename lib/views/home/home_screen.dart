@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../controllers/progress_controller.dart';
 import '../../models/progress_model.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_text_styles.dart';
@@ -17,8 +19,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Demo data — swap with real data when backend is ready
-    final progress = ProgressModel.demo();
+    final progress = context.watch<ProgressController>().progress;
 
     return Scaffold(
       backgroundColor: AppColors.deepNavy,

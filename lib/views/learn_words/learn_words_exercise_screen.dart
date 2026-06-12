@@ -1,12 +1,21 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import '../../controllers/auth_controller.dart';
+import '../../controllers/progress_controller.dart';
+import '../../services/audio_service.dart';
+import '../../services/elevenlabs_tts_service.dart';
+import '../../services/feedback_service.dart';
 import '../../services/whisper_service.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_text_styles.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/mic_button.dart';
+import '../widgets/server_status_banner.dart';
 import '../widgets/start_button.dart';
 
 /// Learn words exercise — shows an image circle + word label, records speech
@@ -24,19 +33,38 @@ class LearnWordsExerciseScreen extends StatefulWidget {
 
 class _LearnWordsExerciseScreenState extends State<LearnWordsExerciseScreen>
     with SingleTickerProviderStateMixin {
-  late String currentWord = widget.initialWord ?? 'كاس';
+  late String currentWord;
+
+  // Image URL loaded from objects.json for the current word
+  String? _imageUrl;
+  bool _imageLoaded = false;
 
   bool isRecording = false;
   bool isProcessing = false;
   WhisperResult? lastResult;
 
   final AudioRecorder _audioRecorder = AudioRecorder();
+  final AudioService _audioService = AudioService();
+  final ElevenLabsTtsService _tts = ElevenLabsTtsService();
   late final AnimationController _feedbackCtrl;
   late final Animation<double> _feedbackAnim;
+
+  // Set of words that have local mp3 files in assets/audio/words
+  static const Set<String> _localAudioWords = {
+    'باب',
+    'بيت',
+    'شمس',
+    'قلم',
+    'قمر',
+    'كأس',
+    'كتاب',
+    'ماء',
+  };
 
   @override
   void initState() {
     super.initState();
+    currentWord = widget.initialWord ?? '';
     _feedbackCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 450),
@@ -45,11 +73,75 @@ class _LearnWordsExerciseScreenState extends State<LearnWordsExerciseScreen>
       parent: _feedbackCtrl,
       curve: Curves.easeOutBack,
     );
+
+    _initExercise();
+  }
+
+  Future<void> _initExercise() async {
+    await _loadObjectImage();
+    _playPrompt();
+  }
+
+  /// Loads objects.json and finds the image URL matching [currentWord].
+  Future<void> _loadObjectImage() async {
+    try {
+      final String jsonString =
+          await rootBundle.loadString('lib/models/objects.json');
+      final List<dynamic> objects = json.decode(jsonString);
+
+      if (currentWord.isEmpty && objects.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            currentWord = objects[0]['arabic'] as String? ?? 'قَلَم';
+          });
+        }
+      }
+
+      // Normalise comparison: strip diacritics for matching
+      final String normalised = _stripDiacritics(currentWord);
+
+      for (final obj in objects) {
+        final String arabic = obj['arabic'] as String? ?? '';
+        if (_stripDiacritics(arabic) == normalised || arabic == currentWord) {
+          final String pic = obj['picture'] as String? ?? '';
+          if (mounted) {
+            setState(() {
+              _imageUrl = pic.isNotEmpty ? pic : null;
+              _imageLoaded = true;
+            });
+          }
+          return;
+        }
+      }
+      // No match found
+      if (mounted) setState(() => _imageLoaded = true);
+    } catch (e) {
+      debugPrint('Error loading object image: $e');
+      if (mounted) setState(() => _imageLoaded = true);
+    }
+  }
+
+  /// Strips Arabic diacritics (harakat) for fuzzy matching.
+  String _stripDiacritics(String text) {
+    return text.replaceAll(RegExp(r'[\u064B-\u065F\u0670\u0640]'), '');
+  }
+
+  void _playPrompt() {
+    if (currentWord.isEmpty) return;
+    final normalised = _stripDiacritics(currentWord);
+    if (_localAudioWords.contains(normalised)) {
+      _audioService.playAsset('audio/words/$normalised.mp3');
+    } else {
+      debugPrint('[ElevenLabs] Speaking word prompt: $currentWord');
+      _tts.speak(currentWord);
+    }
   }
 
   @override
   void dispose() {
     _audioRecorder.dispose();
+    _audioService.dispose();
+    _tts.dispose();
     _feedbackCtrl.dispose();
     super.dispose();
   }
@@ -58,6 +150,8 @@ class _LearnWordsExerciseScreenState extends State<LearnWordsExerciseScreen>
     if (isRecording || isProcessing) return;
 
     try {
+      await _audioService.stop(); // Stop any prompt before recording
+
       if (await _audioRecorder.hasPermission()) {
         final directory = await getTemporaryDirectory();
         final path = '${directory.path}/recording_words.wav';
@@ -95,6 +189,11 @@ class _LearnWordsExerciseScreenState extends State<LearnWordsExerciseScreen>
     await _audioRecorder.stop();
     if (!mounted) return;
 
+    // ── Capture context-dependent values before any await ─────────────────
+    // Reading from context across async gaps triggers use_build_context_synchronously.
+    final progressCtrl = context.read<ProgressController>();
+    final authCtrl = context.read<AuthController>();
+
     setState(() {
       isRecording = false;
       isProcessing = true;
@@ -111,6 +210,41 @@ class _LearnWordsExerciseScreenState extends State<LearnWordsExerciseScreen>
         isProcessing = false;
       });
       _feedbackCtrl.forward(from: 0);
+
+      // Record the attempt for streak tracking
+      progressCtrl.recordWordAttempt(currentWord, result.isCorrect);
+
+      // ── Send attempt to RAG feedback server & speak the response ─────────
+      final streakData = progressCtrl.streakData;
+      final wordStreak = streakData.words[currentWord]?.currentStreak ?? 0;
+      final previousMistakes = result.isCorrect
+          ? 0
+          : (streakData.words[currentWord]?.bestStreak ?? 0);
+      final childName = authCtrl.userProfile?.childName ?? 'الطفل';
+
+      final response = await FeedbackService.sendFeedback(
+        targetText: currentWord,
+        isCorrect: result.isCorrect,
+        childName: childName,
+        spokenText: result.transcript,
+        streak: wordStreak,
+        previousMistakes: previousMistakes,
+      );
+
+      if (!mounted) return;
+
+      // Use the actual key the server returns: 'personalized_text'
+      final feedbackText =
+          response?['personalized_text'] as String? ??
+          response?['feedback'] as String? ??
+          response?['message'] as String?;
+
+      if (feedbackText != null && feedbackText.isNotEmpty) {
+        debugPrint('[ElevenLabs] Speaking: $feedbackText');
+        await _tts.speak(feedbackText);
+      } else {
+        debugPrint('[ElevenLabs] No feedback text received — skipping TTS.');
+      }
     } catch (e) {
       debugPrint('Transcription error: $e');
       if (!mounted) return;
@@ -126,7 +260,7 @@ class _LearnWordsExerciseScreenState extends State<LearnWordsExerciseScreen>
   }
 
   void _handlePlayAudio() {
-    // TODO: play word audio
+    _playPrompt();
   }
 
   @override
@@ -137,9 +271,11 @@ class _LearnWordsExerciseScreenState extends State<LearnWordsExerciseScreen>
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const AppTopBar(title: 'تعلم كلمات جديدة'),
+          // Server status warning banner (hidden when server is up)
+          const ServerStatusBanner(),
           const Spacer(flex: 1),
 
-          // Image circle
+          // Image circle — loads the real image from objects.json
           Center(
             child: Container(
               width: 240,
@@ -149,12 +285,8 @@ class _LearnWordsExerciseScreenState extends State<LearnWordsExerciseScreen>
                 border: Border.all(color: AppColors.warmOrange, width: 5),
                 color: AppColors.white,
               ),
-              child: const Center(
-                child: Icon(
-                  Icons.image_outlined,
-                  size: 80,
-                  color: AppColors.softBlue,
-                ),
+              child: ClipOval(
+                child: _buildObjectImage(),
               ),
             ),
           ),
@@ -226,6 +358,56 @@ class _LearnWordsExerciseScreenState extends State<LearnWordsExerciseScreen>
           const SizedBox(height: 32),
         ],
       ),
+    );
+  }
+
+  /// Builds the image widget for the object circle.
+  Widget _buildObjectImage() {
+    if (!_imageLoaded) {
+      // Still loading — show a subtle spinner
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.softBlue),
+      );
+    }
+
+    if (_imageUrl == null || _imageUrl!.isEmpty) {
+      // No image available — placeholder icon
+      return const Center(
+        child: Icon(
+          Icons.image_outlined,
+          size: 80,
+          color: AppColors.softBlue,
+        ),
+      );
+    }
+
+    return Image.network(
+      _imageUrl!,
+      fit: BoxFit.cover,
+      width: 240,
+      height: 240,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Center(
+          child: CircularProgressIndicator(
+            value: loadingProgress.expectedTotalBytes != null
+                ? loadingProgress.cumulativeBytesLoaded /
+                    loadingProgress.expectedTotalBytes!
+                : null,
+            color: AppColors.softBlue,
+            strokeWidth: 2,
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        return const Center(
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            size: 60,
+            color: AppColors.softBlue,
+          ),
+        );
+      },
     );
   }
 }

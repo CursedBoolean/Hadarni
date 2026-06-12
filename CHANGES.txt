@@ -204,3 +204,214 @@ Session: 2026-05-11 — Whisper ASR Integration
     - Added MODIFY_AUDIO_SETTINGS permission
     (Without these the record package silently fails to record)
 
+─────────────────────────────────────────────────────────
+Session: 2026-05-25 — Streak-Based Progress Tracking
+─────────────────────────────────────────────────────────
+
+33. NEW: lib/models/streak_model.dart
+    - ItemStreak class: currentStreak, bestStreak, lastAttemptAt per letter/word
+    - recordAttempt(bool correct) — increments streak on correct, resets to 0 on incorrect
+    - isMastered getter (bestStreak >= 3, configurable via kMasteryThreshold)
+    - progress getter (0.0–1.0 for dashboard display)
+    - StreakData class: aggregates all letter/word streaks + totalAttempts
+    - withLetterAttempt / withWordAttempt — immutable update methods
+    - lettersLearned / wordsLearned getters count mastered items
+    - Full Firestore serialization: toMap() / fromMap()
+    - Firestore document path: users/{uid}/progress/streaks
+
+34. NEW: lib/services/progress_service.dart
+    - Firestore CRUD for the single streaks document per user
+    - fetchStreaks(uid) — reads from users/{uid}/progress/streaks
+    - saveStreaks(uid, data) — writes with merge option
+    - recordAttempt() — updates specific letter/word streak and persists
+
+35. NEW: lib/controllers/progress_controller.dart
+    - ChangeNotifier-based controller wrapping ProgressService
+    - Holds StreakData in memory, exposes computed ProgressModel via getter
+    - loadProgress() — fetches from Firestore on login/app start
+    - recordLetterAttempt(letter, correct) — updates streak + Firestore + notifies UI
+    - recordWordAttempt(word, correct) — same for words
+    - reset() — clears local state on logout
+    - Falls back to ProgressModel.demo() if not yet loaded
+
+36. MODIFIED: lib/models/progress_model.dart
+    - Added import for streak_model.dart
+    - New factory: ProgressModel.fromStreakData(StreakData) — converts live streak
+      data into ProgressModel format for the dashboard
+    - Pre-populates all 28 Arabic letters and 8 demo words with progress values
+    - Existing demo() factory preserved as fallback
+
+37. MODIFIED: lib/main.dart
+    - Switched from single ChangeNotifierProvider to MultiProvider
+    - Added ProgressController as second provider
+    - AuthGate now calls loadProgress() when user is authenticated
+    - AuthGate calls reset() when user signs out
+
+38. MODIFIED: lib/views/home/home_screen.dart
+    - Replaced ProgressModel.demo() with context.watch<ProgressController>().progress
+    - Dashboard now reactively updates when streaks change
+    - Added import for provider and progress_controller
+
+39. MODIFIED: lib/views/learn_letters/learn_letters_exercise_screen.dart
+    - After Whisper transcription, calls ProgressController.recordLetterAttempt()
+    - Each correct/incorrect pronunciation now persists to Firestore
+
+40. MODIFIED: lib/views/learn_words/learn_words_exercise_screen.dart
+    - After Whisper transcription, calls ProgressController.recordWordAttempt()
+    - Each correct/incorrect pronunciation now persists to Firestore
+
+41. MODIFIED: lib/views/auth/login_screen.dart
+    - Calls loadProgress() after successful login before navigating to HomeScreen
+    - Ensures dashboard has data ready when it renders
+
+42. MODIFIED: lib/views/widgets/app_drawer.dart
+    - Calls ProgressController.reset() on logout
+    - Ensures next user starts with clean progress state
+
+─────────────────────────────────────────────────────────
+Session: 2026-05-25 — Audio Prompts & Playback (TTS)
+─────────────────────────────────────────────────────────
+
+43. NEW: tools/generate_audio.py
+    - Python script using edge-tts to generate high-quality Arabic neural TTS.
+    - Generates 36 audio files (28 letters, 8 demo words).
+    - Format: "قُلْ [letter/word]"
+    - Saved to assets/audio/letters/ and assets/audio/words/.
+
+44. NEW: lib/services/audio_service.dart
+    - AudioService wrapper for the audioplayers package.
+    - playAsset() for bundled audio prompts.
+    - playDeviceFile() for recorded user audio playback.
+    - stop() and dispose() for resource management.
+
+45. MODIFIED: pubspec.yaml
+    - Added audioplayers: ^6.0.0 dependency.
+    - Added assets/audio/letters/ and assets/audio/words/ to assets block.
+
+46. MODIFIED: lib/views/learn_letters/learn_letters_exercise_screen.dart
+    - Integrated AudioService.
+    - Plays letter prompt automatically on screen load (via post-frame callback).
+    - Added a speaker icon button to replay the prompt.
+    - Automatically plays back the user's recorded audio after Whisper transcription.
+
+47. MODIFIED: lib/views/learn_words/learn_words_exercise_screen.dart
+    - Integrated AudioService.
+    - Plays word prompt automatically on screen load.
+    - Wired existing speaker icon to replay the prompt.
+    - Automatically plays back the user's recorded audio after Whisper transcription.
+
+─────────────────────────────────────────────────────
+Session: 2026-06-12 — Images, Final Model, Server Startup, Feedback Audio & RAG Integration
+─────────────────────────────────────────────────────
+
+48. MODIFIED: tools/whisper_server.py
+    - Changed MODEL_DIR from whisper-finetuned-arabic/ to final_model/final_model/
+    - Updated the FileNotFoundError message accordingly
+    - No other changes to server logic
+
+49. NEW: lib/services/feedback_service.dart
+    - FeedbackService.sendFeedback() — POSTs pronunciation attempt data to the
+      RAG /feedback endpoint, mirroring the payload format used in evaluate_ngrok.py:
+        { target_letter, is_correct, child_name, spoken_text, streak, previous_mistakes }
+    - FeedbackService.isReachable() — GET /health check on the feedback server
+    - feedbackBaseUrl defaults to http://192.168.1.10:5000 (change to ngrok URL)
+    - Non-critical — errors are logged but never rethrow to avoid disrupting the UX
+
+50. NEW: lib/services/whisper_server_manager.dart
+    - WhisperServerManager (ChangeNotifier) tracks server health state
+    - checkServerHealth() — fires a GET /health request on app startup
+    - retry() — re-runs the health check (e.g. after user taps "Retry")
+    - Exposes isServerUp and isChecking for reactive UI updates
+
+51. MODIFIED: lib/main.dart
+    - Creates WhisperServerManager before runApp and calls checkServerHealth()
+      immediately (fire-and-forget) so the server check runs during app init
+    - Passes whisperManager to HadarniApp constructor
+    - Added ChangeNotifierProvider<WhisperServerManager> to MultiProvider
+
+52. NEW: lib/views/widgets/server_status_banner.dart
+    - Slim orange warning banner that appears at the top of exercise screens
+      when the Whisper server is unreachable
+    - Shows a spinner while checking, a retry button when down
+    - Auto-hides once WhisperServerManager.isServerUp becomes true
+
+53. MODIFIED: lib/views/learn_letters/learn_letters_exercise_screen.dart
+    - Added ServerStatusBanner below AppTopBar
+    - Replaced playDeviceFile (recorded audio playback) with:
+        • playAsset('audio/feedback/correct.mp3') on correct pronunciation
+        • playAsset('audio/feedback/incorrect.mp3') on incorrect pronunciation
+    - Added FeedbackService.sendFeedback() call after each attempt
+      (captures streak and childName from controllers before async gaps)
+    - Fixed use_build_context_synchronously: context reads moved before awaits
+    - Added import for AuthController and FeedbackService
+
+54. MODIFIED: lib/views/learn_words/learn_words_exercise_screen.dart
+    - Added ServerStatusBanner below AppTopBar
+    - Loads the matching image URL from lib/models/objects.json using
+      _loadObjectImage() (strips diacritics for fuzzy matching)
+    - Replaces static placeholder icon with Image.network() inside a ClipOval
+      circle — shows a progress indicator while loading, icon on error
+    - Replaced playDeviceFile with feedback audio chimes (same as letters)
+    - Added FeedbackService.sendFeedback() call (same pattern as letters)
+    - Fixed use_build_context_synchronously: context reads moved before awaits
+    - Added import for AuthController and FeedbackService
+
+55. MODIFIED: tools/generate_audio.py
+    - Added OUTPUT_DIR_FEEDBACK = '../assets/audio/feedback'
+    - Added FEEDBACK_SOUNDS list: correct.mp3 and incorrect.mp3
+    - Generates Arabic TTS feedback sounds alongside letters and words
+
+56. NEW: assets/audio/feedback/correct.mp3
+    - TTS: "أحسنت! إجابة صحيحة!" (ar-SA-ZariyahNeural voice)
+    - Played after a correct pronunciation
+
+57. NEW: assets/audio/feedback/incorrect.mp3
+    - TTS: "حاول مرة أخرى، أنت قادر على ذلك!" (ar-SA-ZariyahNeural voice)
+    - Played after an incorrect pronunciation
+
+58. MODIFIED: pubspec.yaml
+    - Added assets/audio/feedback/ to the assets block
+
+59. NEW: tools/start_whisper.bat
+    - Windows batch script to start the Whisper ASR server with one command
+    - Validates Python, uvicorn, and model file existence before launching
+    - Usage: tools\start_whisper.bat (from project root)
+
+60. MODIFIED: test/widget_test.dart
+    - Updated to pass required whisperManager argument to HadarniApp
+
+─────────────────────────────────────────────────────
+Session: 2026-06-12 — Automated Host IP Configuration & UI Reversion
+─────────────────────────────────────────────────────
+
+61. MODIFIED: lib/services/whisper_service.dart
+    - Changed baseUrl from static const to static String, making it easily modifiable by the host server start script.
+
+62. MODIFIED: lib/services/feedback_service.dart
+    - Changed feedbackBaseUrl from static const to static String, making it easily modifiable by the host server start script.
+
+63. REVERTED: lib/services/whisper_server_manager.dart
+    - Reverted to a simple health check notifier class without path_provider or JSON configuration saving logic.
+    - Matches _baseUrl exactly with WhisperService.baseUrl.
+
+64. REVERTED: lib/main.dart
+    - Reverted app initialization to perform the server check health call directly, removing the asynchronous config load step.
+
+65. DELETED: lib/views/widgets/server_settings_dialog.dart
+    - Removed the configuration dialog completely.
+
+66. REVERTED: lib/views/widgets/app_drawer.dart
+    - Removed the "Server Settings" menu option from the navigation drawer.
+
+67. REVERTED: lib/views/widgets/server_status_banner.dart
+    - Removed the settings gear icon shortcut.
+
+68. NEW: tools/run_server.py
+    - Created a Python launcher script that automatically resolves the host device's network IP.
+    - Automates rewriting the host IP in whisper_service.dart, feedback_service.dart, and whisper_server_manager.dart.
+    - Launches uvicorn bound to the detected host IP on port 8000.
+
+69. MODIFIED: tools/start_whisper.bat
+    - Updated to call `python tools/run_server.py` to automate the configuration and launch sequence in one click.
+
+

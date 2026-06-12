@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/auth_controller.dart';
+import '../../controllers/progress_controller.dart';
 import '../constants/app_colors.dart';
 import '../home/home_screen.dart';
 import '../learn_letters/learn_letters_intro_screen.dart';
@@ -147,6 +148,7 @@ class AppDrawer extends StatelessWidget {
     final auth = Provider.of<AuthController>(context, listen: false);
     await auth.logOut();
     if (context.mounted) {
+      context.read<ProgressController>().reset();
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const WelcomeScreen()),
         (route) => false,
