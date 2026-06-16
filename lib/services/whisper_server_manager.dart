@@ -17,6 +17,7 @@ class WhisperServerManager extends ChangeNotifier {
   bool get isChecking => _isChecking;
 
   /// The base URL used for all Whisper requests.
+  /// Updated automatically by tools/run_server.py — no manual editing needed.
   static const String _baseUrl = 'http://192.168.1.7:8000';
 
   /// Checks server health and updates [isServerUp].
@@ -27,7 +28,10 @@ class WhisperServerManager extends ChangeNotifier {
 
     try {
       final response = await http
-          .get(Uri.parse('$_baseUrl/health'))
+          .get(
+            Uri.parse('$_baseUrl/health'),
+            headers: {'ngrok-skip-browser-warning': 'true'},
+          )
           .timeout(const Duration(seconds: 5));
       _isServerUp = response.statusCode == 200;
     } catch (_) {

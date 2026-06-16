@@ -33,14 +33,12 @@ class WhisperServerException implements Exception {
   String toString() => 'WhisperServerException($statusCode): $message';
 }
 
-/// HTTP client for the local Whisper ASR FastAPI server.
+/// HTTP client for the Whisper ASR FastAPI server.
 ///
-/// Server URL notes:
-///   • Android emulator  →  http://192.168.1.7:8000  (loopback to host machine)
-///   • iOS simulator     →  http://192.168.1.7:8000
-///   • Physical device   →  http://`HOST_LAN_IP`:8000
-///
-/// Change [baseUrl] to match your development setup.
+/// [baseUrl] is updated automatically by `tools/run_server.py` each time
+/// the server starts — no manual editing required.
+///   • LAN mode   →  http://192.168.x.x:8000
+///   • ngrok mode →  https://xxxx.ngrok-free.app
 class WhisperService {
   // Android emulator  → http://192.168.1.7:8000
   // iOS simulator     → http://192.168.1.7:8000
@@ -59,6 +57,7 @@ class WhisperService {
     final uri = Uri.parse('$baseUrl/transcribe');
 
     final request = http.MultipartRequest('POST', uri)
+      ..headers['ngrok-skip-browser-warning'] = 'true'
       ..fields['target'] = target
       ..files.add(await http.MultipartFile.fromPath('audio', audioPath));
 
@@ -80,7 +79,10 @@ class WhisperService {
   static Future<bool> isReachable() async {
     try {
       final response = await http
-          .get(Uri.parse('$baseUrl/health'))
+          .get(
+            Uri.parse('$baseUrl/health'),
+            headers: {'ngrok-skip-browser-warning': 'true'},
+          )
           .timeout(const Duration(seconds: 5));
       return response.statusCode == 200;
     } catch (_) {

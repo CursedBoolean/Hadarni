@@ -32,9 +32,7 @@ class HadarniApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider<AuthController>(
-          create: (_) => AuthController(),
-        ),
+        ChangeNotifierProvider<AuthController>(create: (_) => AuthController()),
         ChangeNotifierProvider<ProgressController>(
           create: (_) => ProgressController(),
         ),
