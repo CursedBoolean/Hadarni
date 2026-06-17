@@ -152,15 +152,6 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
                   onChanged: (val) => setState(() => _disorderType1 = val),
                 ),
                 const SizedBox(height: 24),
-                // Disorder type 2
-                CustomDropdownField(
-                  label: 'نوع اضطراب النطق',
-                  hint: 'نوع اضطراب النطق',
-                  value: _disorderType2,
-                  items: _disorderOptions,
-                  onChanged: (val) => setState(() => _disorderType2 = val),
-                ),
-                const SizedBox(height: 48),
                 // Submit button with loading state
                 Consumer<AuthController>(
                   builder: (context, auth, _) {
@@ -181,8 +172,9 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
                       child: ElevatedButton(
                         onPressed: _handleSubmit,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              AppColors.deepNavy.withValues(alpha: 0.6),
+                          backgroundColor: AppColors.deepNavy.withValues(
+                            alpha: 0.6,
+                          ),
                           foregroundColor: AppColors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -194,8 +186,10 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
                           children: [
                             const Icon(Icons.chevron_right, size: 28),
                             const SizedBox(width: 8),
-                            Text('تسجيل الدخول',
-                                style: AppTextStyles.buttonText),
+                            Text(
+                              'تسجيل الدخول',
+                              style: AppTextStyles.buttonText,
+                            ),
                           ],
                         ),
                       ),

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import '../../services/audio_service.dart';
+import '../../services/elevenlabs_tts_service.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_text_styles.dart';
 import '../widgets/app_top_bar.dart';
@@ -19,10 +21,42 @@ class _WordGameScreenState extends State<WordGameScreen> {
   List<Map<String, dynamic>> allObjects = [];
   List<Map<String, dynamic>> currentOptions = [];
   Map<String, dynamic>? targetObject;
-  
+
   bool isLoading = true;
   int? selectedIndex;
   bool isAnswerCorrect = false;
+
+  final AudioService _audioService = AudioService();
+  final ElevenLabsTtsService _tts = ElevenLabsTtsService();
+
+  // Words that have bundled local mp3s in assets/audio/words/
+  static const Set<String> _localAudioWords = {
+    'باب', 'بيت', 'شمس', 'قلم', 'قمر', 'كأس', 'كتاب', 'ماء',
+  };
+
+  /// Strips Arabic diacritics for audio filename matching.
+  String _stripDiacritics(String text) =>
+      text.replaceAll(RegExp(r'[\u064B-\u065F\u0670\u0640]'), '');
+
+  /// Speaks the target word via local asset or ElevenLabs.
+  void _playWordPrompt() {
+    if (targetObject == null) return;
+    final word = targetObject!['arabic'] as String? ?? '';
+    if (word.isEmpty) return;
+    final normalised = _stripDiacritics(word);
+    if (_localAudioWords.contains(normalised)) {
+      _audioService.playAsset('audio/words/$normalised.mp3');
+    } else {
+      _tts.speak(word);
+    }
+  }
+
+  @override
+  void dispose() {
+    _audioService.dispose();
+    _tts.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -75,6 +109,8 @@ class _WordGameScreenState extends State<WordGameScreen> {
         isLoading = false;
       });
     }
+    // Speak the new target word after the frame settles
+    WidgetsBinding.instance.addPostFrameCallback((_) => _playWordPrompt());
   }
 
   void _onCardTap(int index) {
@@ -198,14 +234,29 @@ class _WordGameScreenState extends State<WordGameScreen> {
           ),
           // Word label — centered
           if (!isLoading && targetObject != null)
-            Center(
-              child: Text(
-                targetObject!['arabic'],
-                style: AppTextStyles.wordLabel.copyWith(
-                  color: AppColors.warmOrange,
-                  fontSize: 32,
-                ),
-                textDirection: TextDirection.rtl,
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  GestureDetector(
+                    onTap: _playWordPrompt,
+                    child: const Icon(
+                      Icons.volume_up,
+                      color: AppColors.warmOrange,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    targetObject!['arabic'],
+                    style: AppTextStyles.wordLabel.copyWith(
+                      color: AppColors.warmOrange,
+                      fontSize: 32,
+                    ),
+                    textDirection: TextDirection.rtl,
+                  ),
+                ],
               ),
             ),
           const SizedBox(height: 20),

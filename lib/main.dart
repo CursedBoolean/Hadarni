@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hadarni/views/auth/additional_info_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
@@ -58,7 +59,7 @@ class HadarniApp extends StatelessWidget {
             child: child!,
           );
         },
-        home: const HomeScreen(),
+        home: const AdditionalInfoScreen(),
       ),
     );
   }

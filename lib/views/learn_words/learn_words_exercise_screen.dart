@@ -239,12 +239,13 @@ class _LearnWordsExerciseScreenState extends State<LearnWordsExerciseScreen>
           response?['feedback'] as String? ??
           response?['message'] as String?;
 
-      if (feedbackText != null && feedbackText.isNotEmpty) {
-        debugPrint('[ElevenLabs] Speaking: $feedbackText');
-        await _tts.speak(feedbackText);
-      } else {
-        debugPrint('[ElevenLabs] No feedback text received — skipping TTS.');
-      }
+      // Always speak feedback — use RAG response when available, fallback otherwise
+      final toSpeak = (feedbackText != null && feedbackText.isNotEmpty)
+          ? feedbackText
+          : (result.isCorrect ? 'ممتاز! أحسنت' : 'حاول مرة أخرى');
+
+      debugPrint('[ElevenLabs] Speaking: $toSpeak');
+      await _tts.speak(toSpeak);
     } catch (e) {
       debugPrint('Transcription error: $e');
       if (!mounted) return;
