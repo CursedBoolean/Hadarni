@@ -78,7 +78,7 @@ def _update_dart_files(url: str) -> None:
 
         if new_content != original:
             path.write_text(new_content, encoding="utf-8", newline="\n")
-            print(f"[Info] Updated base URL → {url}  in: {path.name}")
+            print(f"[Info] Updated base URL -> {url}  in: {path.name}")
         else:
             print(f"[Info] Base URL already set correctly in: {path.name}")
 
@@ -108,7 +108,7 @@ def _start_uvicorn_thread() -> threading.Thread:
 def _start_ngrok_process() -> subprocess.Popen:
     """Spawn ngrok as a subprocess."""
     return subprocess.Popen(
-        ["ngrok", "http", str(_PORT)],
+        ["ngrok", "http", f"127.0.0.1:{_PORT}"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -128,22 +128,26 @@ def run_with_ngrok() -> None:
     print("  Hadarni Whisper ASR — Remote (ngrok) Mode")
     print("=" * 60)
 
-    print("\n[Step 1] Starting uvicorn on localhost:8000 …")
-    _start_uvicorn_thread()
+    print("\n[Step 1] Starting uvicorn on localhost:8000 ...")
+    uvicorn_thread = _start_uvicorn_thread()
     # Give uvicorn a moment to bind before ngrok tries to connect
     time.sleep(2)
 
-    print("[Step 2] Starting ngrok tunnel …")
+    if not uvicorn_thread.is_alive():
+        print("\n[Error] Uvicorn server failed to start. Check if port 8000 is already in use.")
+        raise SystemExit(1)
+
+    print("[Step 2] Starting ngrok tunnel ...")
     ngrok_proc = _start_ngrok_process()
 
     try:
-        print("[Step 3] Waiting for ngrok to publish a URL …")
+        print("[Step 3] Waiting for ngrok to publish a URL ...")
         public_url = _get_ngrok_url()
 
         print("\n" + "=" * 60)
-        print(f"  ✅  Public URL:  {public_url}")
+        print(f"  [OK]  Public URL:  {public_url}")
         print("=" * 60)
-        print("\n[Step 4] Rewriting Dart service files …")
+        print("\n[Step 4] Rewriting Dart service files ...")
         _update_dart_files(public_url)
 
         print("\n[Info] Server is live. Press Ctrl-C to stop.\n")
@@ -153,7 +157,7 @@ def run_with_ngrok() -> None:
             time.sleep(1)
 
     except KeyboardInterrupt:
-        print("\n[Hadarni] Shutting down …")
+        print("\n[Hadarni] Shutting down ...")
     except RuntimeError as exc:
         print(f"\n[Error] {exc}")
         raise SystemExit(1)

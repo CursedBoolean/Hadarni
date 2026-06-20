@@ -127,14 +127,17 @@ class _WordGameScreenState extends State<WordGameScreen> {
         isAnswerCorrect = true;
       });
       
+      _audioService.playAsset('audio/feedback/cheering.mp3');
+      
       // Delay and start next round
-      Future.delayed(const Duration(milliseconds: 1500), () {
+      Future.delayed(const Duration(milliseconds: 2500), () {
         if (mounted) {
           _startNewRound();
         }
       });
     } else {
       // Incorrect Answer - reset after a short delay to let them try again
+      _audioService.playAsset('audio/feedback/wrong.mp3');
       Future.delayed(const Duration(milliseconds: 800), () {
         if (mounted && !isAnswerCorrect) {
           setState(() {
@@ -191,6 +194,11 @@ class _WordGameScreenState extends State<WordGameScreen> {
                             borderWidth = 3;
                           }
 
+                          final isCardSelected = selectedIndex == index;
+                          final isCorrectAnswer = object['arabic'] == targetObject!['arabic'];
+                          final showCheck = (isCardSelected && isAnswerCorrect) || (isAnswerCorrect && isCorrectAnswer);
+                          final showX = isCardSelected && !isAnswerCorrect;
+
                           return GestureDetector(
                             onTap: () => _onCardTap(index),
                             child: Container(
@@ -202,29 +210,56 @@ class _WordGameScreenState extends State<WordGameScreen> {
                                   width: borderWidth,
                                 ),
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Image.network(
-                                  object['picture'],
-                                  fit: BoxFit.cover,
-                                  loadingBuilder: (context, child, loadingProgress) {
-                                    if (loadingProgress == null) return child;
-                                    return const Center(
-                                      child: CircularProgressIndicator(
-                                        color: AppColors.softBlue,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Positioned.fill(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Image.network(
+                                        object['picture'],
+                                        fit: BoxFit.cover,
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) return child;
+                                          return const Center(
+                                            child: CircularProgressIndicator(
+                                              color: AppColors.softBlue,
+                                            ),
+                                          );
+                                        },
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return const Center(
+                                            child: Icon(
+                                              Icons.image_not_supported_outlined,
+                                              size: 40,
+                                              color: AppColors.softBlue,
+                                            ),
+                                          );
+                                        },
                                       ),
-                                    );
-                                  },
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return const Center(
-                                      child: Icon(
-                                        Icons.image_not_supported_outlined,
-                                        size: 40,
-                                        color: AppColors.softBlue,
+                                    ),
+                                  ),
+                                  if (showCheck || showX)
+                                    Positioned.fill(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: showCheck
+                                              ? Colors.green.withValues(alpha: 0.3)
+                                              : Colors.red.withValues(alpha: 0.3),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Center(
+                                          child: Icon(
+                                            showCheck
+                                                ? Icons.check_circle_rounded
+                                                : Icons.cancel_rounded,
+                                            color: Colors.white,
+                                            size: 50,
+                                          ),
+                                        ),
                                       ),
-                                    );
-                                  },
-                                ),
+                                    ),
+                                ],
                               ),
                             ),
                           );

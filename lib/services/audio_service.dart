@@ -8,10 +8,16 @@ class AudioService {
   /// Plays a bundled asset audio file.
   /// [assetPath] should be relative to the `assets/` directory.
   /// Example: 'audio/letters/أ.mp3'
-  Future<void> playAsset(String assetPath) async {
+  Future<void> playAsset(String assetPath, {bool wait = false}) async {
     try {
       await _player.stop();
       await _player.play(AssetSource(assetPath));
+      if (wait) {
+        await _player.onPlayerComplete.first.timeout(
+          const Duration(seconds: 6),
+          onTimeout: () => null,
+        );
+      }
     } catch (e) {
       debugPrint('Error playing asset $assetPath: $e');
     }

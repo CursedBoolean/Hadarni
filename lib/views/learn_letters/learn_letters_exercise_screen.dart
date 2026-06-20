@@ -126,6 +126,7 @@ class _LearnLettersExerciseScreenState extends State<LearnLettersExerciseScreen>
       isRecording = false;
       isProcessing = true;
     });
+    _audioService.playAsset('audio/feedback/drums.mp3');
 
     try {
       final result = await WhisperService.transcribe(
@@ -172,6 +173,12 @@ class _LearnLettersExerciseScreenState extends State<LearnLettersExerciseScreen>
           response?['feedback'] as String? ??
           response?['message'] as String?;
 
+      if (result.isCorrect) {
+        await _audioService.playAsset('audio/feedback/cheering.mp3', wait: true);
+      } else {
+        await _audioService.playAsset('audio/feedback/wrong.mp3', wait: true);
+      }
+
       if (feedbackText != null && feedbackText.isNotEmpty) {
         debugPrint('[ElevenLabs] Speaking: $feedbackText');
         await _tts.speak(feedbackText);
@@ -206,27 +213,58 @@ class _LearnLettersExerciseScreenState extends State<LearnLettersExerciseScreen>
 
           // Cloud with letter and speaker icon
           Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                CloudShape(
-                  width: 300,
-                  height: 220,
-                  child: Text(
-                    currentLetter,
-                    style: AppTextStyles.arabicLetter,
-                    textDirection: TextDirection.rtl,
-                  ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CloudShape(
+                      width: 300,
+                      height: 220,
+                      child: Text(
+                        currentLetter,
+                        style: AppTextStyles.arabicLetter,
+                        textDirection: TextDirection.rtl,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: _playPrompt,
+                      child: const Icon(
+                        Icons.volume_up,
+                        color: AppColors.warmOrange,
+                        size: 36,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: _playPrompt,
-                  child: const Icon(
-                    Icons.volume_up,
-                    color: AppColors.warmOrange,
-                    size: 36,
+                if (lastResult != null && !isProcessing)
+                  ScaleTransition(
+                    scale: _feedbackAnim,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black26,
+                            blurRadius: 16,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        lastResult!.isCorrect
+                            ? Icons.check_circle_rounded
+                            : Icons.cancel_rounded,
+                        color: lastResult!.isCorrect
+                            ? Colors.green.shade600
+                            : Colors.red.shade600,
+                        size: 130,
+                      ),
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -331,12 +369,14 @@ class _RecordingRingState extends State<_RecordingRing>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
-    _scale = Tween<double>(begin: 1.0, end: 1.3).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
-    _opacity = Tween<double>(begin: 0.6, end: 0.0).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 1.3,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _opacity = Tween<double>(
+      begin: 0.6,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -403,7 +443,7 @@ class _FeedbackCard extends StatelessWidget {
             SizedBox(width: 12),
             Text(
               'جاري التحليل…',
-              style: TextStyle(color: Colors.white70, fontSize: 15),
+              style: TextStyle(color: AppColors.deepNavy, fontSize: 15),
             ),
           ],
         ),
@@ -427,7 +467,9 @@ class _FeedbackCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: (correct ? Colors.green : Colors.red).withValues(alpha: 0.25),
+            color: (correct ? Colors.green : Colors.red).withValues(
+              alpha: 0.25,
+            ),
             blurRadius: 12,
             spreadRadius: 2,
           ),
@@ -457,7 +499,7 @@ class _FeedbackCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'سمعنا: ${r.transcript.isEmpty ? '—' : r.transcript}',
+            'سمعنا: ${r.transcript.isEmpty ? '—' : r.transcript.characters.first}',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.8),
               fontSize: 14,

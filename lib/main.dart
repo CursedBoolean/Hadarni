@@ -59,7 +59,7 @@ class HadarniApp extends StatelessWidget {
             child: child!,
           );
         },
-        home: const AdditionalInfoScreen(),
+        home: const AuthGate(),
       ),
     );
   }

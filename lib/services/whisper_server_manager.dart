@@ -18,7 +18,7 @@ class WhisperServerManager extends ChangeNotifier {
 
   /// The base URL used for all Whisper requests.
   /// Updated automatically by tools/run_server.py — no manual editing needed.
-  static const String _baseUrl = 'http://192.168.1.16:8000';
+  static const String _baseUrl = 'https://implant-clapper-straddle.ngrok-free.dev';
 
   /// Checks server health and updates [isServerUp].
   Future<void> checkServerHealth() async {

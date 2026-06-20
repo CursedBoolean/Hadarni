@@ -38,12 +38,12 @@ class WhisperServerException implements Exception {
 /// [baseUrl] is updated automatically by `tools/run_server.py` each time
 /// the server starts — no manual editing required.
 ///   • LAN mode   →  http://192.168.x.x:8000
-///   • ngrok mode →  http://192.168.1.16:8000
+///   • ngrok mode →  https://implant-clapper-straddle.ngrok-free.dev
 class WhisperService {
-  // Android emulator  → http://192.168.1.16:8000
-  // iOS simulator     → http://192.168.1.16:8000
+  // Android emulator  → https://implant-clapper-straddle.ngrok-free.dev
+  // iOS simulator     → https://implant-clapper-straddle.ngrok-free.dev
   // Physical device   → http://<YOUR_LAN_IP>:8000  (e.g. http://192.168.1.x:8000)
-  static String baseUrl = 'http://192.168.1.16:8000';
+  static String baseUrl = 'https://implant-clapper-straddle.ngrok-free.dev';
 
   /// Sends [audioPath] to the server and checks it against [target].
   ///
